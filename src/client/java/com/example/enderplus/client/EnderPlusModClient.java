@@ -6,7 +6,7 @@ import com.example.enderplus.client.particle.ParticleManager;
 import com.example.enderplus.client.particle.CustomParticleRenderer;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
+import net.fabricmc.fabric.api.client.rendering.v1.LevelRenderEvents;
 
 public class EnderPlusModClient implements ClientModInitializer {
     public static final ParticleManager PARTICLE_MANAGER = new ParticleManager();
@@ -32,7 +32,7 @@ public class EnderPlusModClient implements ClientModInitializer {
         });
 
         // Render particles after entities, so they overlay the world
-        WorldRenderEvents.AFTER_ENTITIES.register(context -> {
+        LevelRenderEvents.AFTER_ENTITIES.register(context -> {
             PARTICLE_RENDERER.render(PARTICLE_MANAGER, context);
         });
     }

@@ -3,7 +3,7 @@ package com.example.enderplus.client.particle;
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.*;
-import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
+import net.fabricmc.fabric.api.client.rendering.v1.LevelRenderContext;
 import net.minecraft.client.Camera;
 import net.minecraft.client.renderer.CoreShaders;
 import net.minecraft.world.phys.Vec3;
@@ -31,7 +31,7 @@ public class CustomParticleRenderer {
      * Renders all particles from the given manager into the world.
      * Called each frame from Fabric API's AFTER_ENTITIES render event.
      */
-    public void render(ParticleManager manager, WorldRenderContext context) {
+    public void render(ParticleManager manager, LevelRenderContext context) {
         List<CustomParticle> particles = manager.getParticles();
         if (particles.isEmpty()) return;
 

@@ -1,7 +1,7 @@
 package com.example.enderplus.mixin;
 
 import com.example.enderplus.EnderPlusMod;
-import net.minecraft.world.level.dimension.end.EndDragonFight;
+import net.minecraft.world.level.dimension.end.EnderDragonBattle;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -14,7 +14,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  *
  * We hook into this to trigger our spectacular visual effects on the client side.
  */
-@Mixin(EndDragonFight.class)
+@Mixin(EnderDragonBattle.class)
 public class EnderDragonFightMixin {
 
     /**
