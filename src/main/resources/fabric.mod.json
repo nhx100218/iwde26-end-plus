@@ -1,0 +1,38 @@
+{
+	"schemaVersion": 1,
+	"id": "enderplus",
+	"version": "${version}",
+	"name": "EnderPlus",
+	"description": "Custom particle rendering system with spectacular Ender Dragon resurrection effects",
+	"authors": [
+		"EnderPlus Team"
+	],
+	"contact": {
+		"homepage": "https://github.com/enderplus",
+		"sources": "https://github.com/enderplus/enderplus"
+	},
+	"license": "MIT",
+	"icon": "assets/enderplus/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"com.example.enderplus.EnderPlusMod"
+		],
+		"client": [
+			"com.example.enderplus.client.EnderPlusModClient"
+		]
+	},
+	"mixins": [
+		"enderplus.mixins.json",
+		{
+			"config": "enderplus.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.19.3",
+		"minecraft": "~26.1.2",
+		"java": ">=25",
+		"fabric-api": "*"
+	}
+}
