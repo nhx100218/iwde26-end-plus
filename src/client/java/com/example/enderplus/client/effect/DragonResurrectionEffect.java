@@ -30,6 +30,11 @@ public class DragonResurrectionEffect {
     private static final int PILLAR_SEGMENTS = 12;
     private static final int RUNE_COUNT = 30;
 
+    /** Packed overlay: 0 = no overlay */
+    private static final int NO_OVERLAY = 0;
+    /** Packed light: fullbright (sky=15, block=15) */
+    private static final int FULLBRIGHT = 0x00F000F0;
+
     private final List<ActiveEffect> activeEffects = new ArrayList<>();
 
     /** Cached RenderType for the light pillar (additive glow effect) */
@@ -86,7 +91,7 @@ public class DragonResurrectionEffect {
     /**
      * Render light pillars. Uses RenderTypes.beaconBeam-style additive blending.
      */
-    public void render(Camera camera, float tickDelta) {
+    public void render(Camera camera) {
         if (activeEffects.isEmpty()) return;
 
         // Lazy-init the pillar render type with a solid white texture
@@ -150,6 +155,11 @@ public class DragonResurrectionEffect {
             float c2 = (float) Math.cos(a2) * radius;
             float s2 = (float) Math.sin(a2) * radius;
 
+            // Outward-facing normal for this cylinder face
+            float midAngle = (float) ((a1 + a2) / 2.0);
+            float nx = (float) Math.cos(midAngle);
+            float nz = (float) Math.sin(midAngle);
+
             // Bottom: bright purple
             int irB = (int) (br * 1.3f * 255); int igB = (int) (bg * 1.3f * 255); int ibB = (int) (bb * 1.3f * 255);
             if (irB > 255) irB = 255; if (igB > 255) igB = 255; if (ibB > 255) ibB = 255;
@@ -158,14 +168,24 @@ public class DragonResurrectionEffect {
             int irT = (int) (br * 0.2f * 255); int igT = (int) (bg * 0.1f * 255); int ibT = (int) (bb * 0.3f * 255);
             int iaT = (int) (ia * 0.05f);
 
-            builder.addVertex((float)(cx + c1), (float)cy, (float)(cz + s1))
-                .setColor(irB, igB, ibB, ia).setUv(0, 0);
-            builder.addVertex((float)(cx + c2), (float)cy, (float)(cz + s2))
-                .setColor(irB, igB, ibB, ia).setUv(1, 0);
-            builder.addVertex((float)(cx + c2), (float)(cy + height), (float)(cz + s2))
-                .setColor(irT, igT, ibT, iaT).setUv(1, 1);
-            builder.addVertex((float)(cx + c1), (float)(cy + height), (float)(cz + s1))
-                .setColor(irT, igT, ibT, iaT).setUv(0, 1);
+            // Vertex chain: set all required elements (UV1, UV2, Normal) BEFORE each addVertex().
+            // In MC 26.1, addVertex finalizes the PREVIOUS vertex and validates all elements.
+            builder.setColor(irB, igB, ibB, ia).setUv(0, 0)
+                .setUv1(NO_OVERLAY, NO_OVERLAY).setUv2(FULLBRIGHT, FULLBRIGHT)
+                .setNormal(nx, 0, nz)
+                .addVertex((float)(cx + c1), (float)cy, (float)(cz + s1));
+            builder.setColor(irB, igB, ibB, ia).setUv(1, 0)
+                .setUv1(NO_OVERLAY, NO_OVERLAY).setUv2(FULLBRIGHT, FULLBRIGHT)
+                .setNormal(nx, 0, nz)
+                .addVertex((float)(cx + c2), (float)cy, (float)(cz + s2));
+            builder.setColor(irT, igT, ibT, iaT).setUv(1, 1)
+                .setUv1(NO_OVERLAY, NO_OVERLAY).setUv2(FULLBRIGHT, FULLBRIGHT)
+                .setNormal(nx, 0, nz)
+                .addVertex((float)(cx + c2), (float)(cy + height), (float)(cz + s2));
+            builder.setColor(irT, igT, ibT, iaT).setUv(0, 1)
+                .setUv1(NO_OVERLAY, NO_OVERLAY).setUv2(FULLBRIGHT, FULLBRIGHT)
+                .setNormal(nx, 0, nz)
+                .addVertex((float)(cx + c1), (float)(cy + height), (float)(cz + s1));
         }
     }
 

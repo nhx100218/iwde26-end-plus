@@ -70,7 +70,7 @@ public class EnderPlusModClient implements ClientModInitializer {
             particleRenderer.render(context.poseStack(), camera, tickDelta);
 
             // Render light pillar (additive blend for glow)
-            dragonEffect.render(camera, tickDelta);
+            dragonEffect.render(camera);
         });
 
         EnderPlusMod.LOGGER.info("EnderPlus client initialized successfully!");

@@ -24,6 +24,11 @@ import java.util.List;
 public class ParticleRenderer {
     public static final int MAX_PARTICLES = 2000;
 
+    /** Packed overlay: 0 = no overlay */
+    private static final int NO_OVERLAY = 0;
+    /** Packed light: fullbright (sky=15, block=15 for both corners) */
+    private static final int FULLBRIGHT = 0x00F000F0;
+
     private final List<Particle> particles = new ArrayList<>();
     private final List<Particle> pendingAdditions = new ArrayList<>();
 
@@ -135,14 +140,27 @@ public class ParticleRenderer {
             int ia = (int) (p.alpha * lifeRatio * 255.0f);
             if (ia < 0) ia = 0; if (ia > 255) ia = 255;
 
-            builder.addVertex((float)(renderX - crx - cux), (float)(renderY - cry - cuy), (float)(renderZ - crz - cuz))
-                .setColor(ir, ig, ib, ia).setUv(0, 0);
-            builder.addVertex((float)(renderX + crx - cux), (float)(renderY + cry - cuy), (float)(renderZ + crz - cuz))
-                .setColor(ir, ig, ib, ia).setUv(1, 0);
-            builder.addVertex((float)(renderX + crx + cux), (float)(renderY + cry + cuy), (float)(renderZ + crz + cuz))
-                .setColor(ir, ig, ib, ia).setUv(1, 1);
-            builder.addVertex((float)(renderX - crx + cux), (float)(renderY - cry + cuy), (float)(renderZ - crz + cuz))
-                .setColor(ir, ig, ib, ia).setUv(0, 1);
+            // Billboard normal faces the camera
+            Vector3fc fn = camera.forwardVector();
+
+            // Vertex chain: set all required elements (UV1, UV2, Normal) before each addVertex().
+            // In MC 26.1, addVertex finalizes the PREVIOUS vertex — so all state must be set first.
+            builder.setColor(ir, ig, ib, ia).setUv(0, 0)
+                .setUv1(NO_OVERLAY, NO_OVERLAY).setUv2(FULLBRIGHT, FULLBRIGHT)
+                .setNormal(fn.x(), fn.y(), fn.z())
+                .addVertex((float)(renderX - crx - cux), (float)(renderY - cry - cuy), (float)(renderZ - crz - cuz));
+            builder.setColor(ir, ig, ib, ia).setUv(1, 0)
+                .setUv1(NO_OVERLAY, NO_OVERLAY).setUv2(FULLBRIGHT, FULLBRIGHT)
+                .setNormal(fn.x(), fn.y(), fn.z())
+                .addVertex((float)(renderX + crx - cux), (float)(renderY + cry - cuy), (float)(renderZ + crz - cuz));
+            builder.setColor(ir, ig, ib, ia).setUv(1, 1)
+                .setUv1(NO_OVERLAY, NO_OVERLAY).setUv2(FULLBRIGHT, FULLBRIGHT)
+                .setNormal(fn.x(), fn.y(), fn.z())
+                .addVertex((float)(renderX + crx + cux), (float)(renderY + cry + cuy), (float)(renderZ + crz + cuz));
+            builder.setColor(ir, ig, ib, ia).setUv(0, 1)
+                .setUv1(NO_OVERLAY, NO_OVERLAY).setUv2(FULLBRIGHT, FULLBRIGHT)
+                .setNormal(fn.x(), fn.y(), fn.z())
+                .addVertex((float)(renderX - crx + cux), (float)(renderY - cry + cuy), (float)(renderZ - crz + cuz));
         }
 
         // Build and draw the mesh
