@@ -55,17 +55,8 @@ java {
     targetCompatibility = JavaVersion.VERSION_25
 }
 
-// Use standard jar instead of remapJar since MC 26.1 is unobfuscated
-jar {
-    from("src/main/resources") {
-        include "fabric.mod.json"
-    }
-    manifest {
-        attributes(
-            "Main-Class": "net.fabricmc.loader.impl.launch.knot.KnotClient"
-        )
-    }
-}
+// Loom handles the jar task automatically — no manual jar {} needed.
+// MC 26.1 is unobfuscated, so remapJar is a pass-through.
 
 publishing {
     publications {
