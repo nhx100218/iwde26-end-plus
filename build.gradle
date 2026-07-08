@@ -26,6 +26,9 @@ loom {
 }
 
 dependencies {
+    // Minecraft dependency — required by Loom to download and set up the MC jar
+    // (even though MC 26.1 is un-obfuscated and no mappings are needed)
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
     // Use implementation instead of modImplementation (important for MC 26.1!)
     implementation "net.fabricmc:fabric-loader:0.19.3"
     implementation "net.fabricmc.fabric-api:fabric-api:0.154.2+26.1.2"
