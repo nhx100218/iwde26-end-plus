@@ -1,15 +1,12 @@
 {
-	"required": true,
-	"package": "com.example.enderplus.client.mixin",
-	"compatibilityLevel": "JAVA_25",
-	"client": [
-		"EnderDragonFightMixin",
-		"LevelRendererMixin"
-	],
-	"injectors": {
-		"defaultRequire": 1
-	},
-	"overwrites": {
-		"requireAnnotations": true
-	}
+    "required": true,
+    "package": "com.example.enderplus.client.mixin",
+    "compatibilityLevel": "JAVA_25",
+    "client": [],
+    "injectors": {
+        "defaultRequire": 1
+    },
+    "overwrites": {
+        "requireAnnotations": true
+    }
 }

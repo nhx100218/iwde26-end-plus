@@ -1,562 +1,248 @@
 package com.example.enderplus.client.effect;
 
-import com.example.enderplus.client.EnderPlusModClient;
-import com.example.enderplus.client.particle.CustomParticle;
-import com.example.enderplus.client.particle.ParticleManager;
+import com.example.enderplus.client.particle.Particle;
+import com.example.enderplus.client.particle.ParticleRenderer;
+import com.mojang.blaze3d.vertex.*;
+import net.minecraft.client.Camera;
+import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.client.renderer.rendertype.RenderTypes;
+import net.minecraft.core.BlockPos;
 
-import java.util.Random;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
 
 /**
- * Orchestrates a spectacular Ender Dragon resurrection visual effect.
+ * Manages the dragon resurrection visual effect.
  *
- * Timeline (10 seconds = 200 ticks):
- *   Phase 1  (0-2s):   Rune circles materialize around the portal
- *   Phase 2  (1-4s):   Light beams erupt upward from the portal
- *   Phase 3  (2-6s):   Runic explosion — particles burst outward
- *   Phase 4  (4-8s):   Massive vortex spiral, energy convergence
- *   Phase 5  (6-10s):  Shockwave rings, final flash, fade out
+ * Visual elements:
+ * 1. Runic Burst — 30 runes spiraling outward, rotating and fading
+ * 2. Purple Light Pillar — vertical beam 70 blocks tall, pulsing brightness
+ * 3. Particle Explosion — 400+ purple particles rising around the pillar
+ *
+ * Each effect instance runs for ~7 seconds (140 ticks).
  */
 public class DragonResurrectionEffect {
 
-    private static final int TOTAL_DURATION = 200; // 10 seconds
-    private static final Random RANDOM = new Random();
+    private static final int EFFECT_DURATION = 140;
+    private static final int PILLAR_HEIGHT = 70;
+    private static final float PILLAR_WIDTH = 2.5f;
+    private static final int PILLAR_SEGMENTS = 12;
+    private static final int RUNE_COUNT = 30;
 
-    private boolean active = false;
-    private int tick = 0;
-    private double originX, originY, originZ;
+    private final List<ActiveEffect> activeEffects = new ArrayList<>();
 
-    // Purple color palette
-    private static final float[][] PURPLE_PALETTE = {
-        { 0.55f, 0.05f, 0.55f }, // dark purple
-        { 0.60f, 0.10f, 0.70f }, // medium purple
-        { 0.70f, 0.20f, 0.85f }, // bright purple
-        { 0.85f, 0.35f, 1.00f }, // violet
-        { 0.95f, 0.50f, 1.00f }, // light violet
-        { 0.40f, 0.00f, 0.50f }, // deep purple
-        { 0.90f, 0.10f, 0.95f }, // magenta-purple
-        { 0.75f, 0.00f, 1.00f }, // electric purple
-    };
+    /** Cached RenderType for the light pillar (additive glow effect) */
+    private RenderType cachedPillarRenderType;
 
-    /**
-     * Triggers the effect at the given world coordinates.
-     */
-    public void trigger(double x, double y, double z) {
-        this.active = true;
-        this.tick = 0;
-        this.originX = x;
-        this.originY = y;
-        this.originZ = z;
-    }
+    private static class ActiveEffect {
+        final BlockPos pos;
+        int age;
+        boolean runesSpawned;
 
-    /**
-     * Called each client tick. Advances the effect timeline and spawns particles.
-     */
-    public void tick() {
-        if (!active) return;
-
-        ParticleManager pm = EnderPlusModClient.PARTICLE_MANAGER;
-
-        if (tick < TOTAL_DURATION) {
-            // ---- Phase 1: Rune materialization (0-60 ticks) ----
-            if (tick < 60) {
-                spawnRuneCircle(pm, tick);
-                spawnFloatingRunes(pm, tick);
-            }
-
-            // ---- Phase 2: Light beams (20-90 ticks) ----
-            if (tick >= 20 && tick < 90) {
-                spawnLightBeams(pm, tick);
-            }
-
-            // ---- Phase 3: Runic explosion (40-130 ticks) ----
-            if (tick >= 40 && tick < 130) {
-                spawnRunicExplosion(pm, tick);
-                spawnBurstParticles(pm, tick);
-            }
-
-            // ---- Phase 4: Vortex spiral (80-180 ticks) ----
-            if (tick >= 80 && tick < 180) {
-                spawnVortex(pm, tick);
-                spawnEnergyConvergence(pm, tick);
-            }
-
-            // ---- Phase 5: Shockwave & finale (120-200 ticks) ----
-            if (tick >= 120 && tick < TOTAL_DURATION) {
-                spawnShockwave(pm, tick);
-                spawnFinalFlash(pm, tick);
-            }
-
-            // Ambient sparkles throughout
-            spawnAmbientSparkles(pm);
+        ActiveEffect(BlockPos pos) {
+            this.pos = pos;
+            this.age = 0;
+            this.runesSpawned = false;
         }
 
-        tick++;
-
-        if (tick >= TOTAL_DURATION + 20) {
-            active = false;
-            tick = 0;
+        boolean isExpired() {
+            return age >= EFFECT_DURATION;
         }
     }
 
-    public boolean isActive() {
-        return active;
+    public void trigger(BlockPos pos) {
+        activeEffects.add(new ActiveEffect(pos));
     }
 
-    // ================================================================
-    // Phase 1: Rune Circles
-    // ================================================================
+    public void tick(ParticleRenderer particleRenderer) {
+        Iterator<ActiveEffect> it = activeEffects.iterator();
+        while (it.hasNext()) {
+            ActiveEffect effect = it.next();
+            effect.age++;
 
-    /**
-     * Spawns particles in concentric circles around the portal, like
-     * summoning runes appearing on the ground.
-     */
-    private void spawnRuneCircle(ParticleManager pm, int effectTick) {
-        float progress = Math.min(1f, effectTick / 45f); // expand over 2.25s
-        float alpha = easeInOut(progress);
-
-        int numRings = 3 + effectTick / 15;
-        for (int ring = 0; ring < numRings; ring++) {
-            float ringRadius = (1.5f + ring * 1.2f) * progress;
-            int particlesPerRing = 16 + ring * 8;
-            float ringY = originY + 0.1f + ring * 0.15f;
-
-            // Each ring has rune-like gaps (not a full circle)
-            for (int i = 0; i < particlesPerRing; i++) {
-                // Skip some particles to create "rune" gaps
-                int segment = i / 4;
-                if (i % 4 == 3 && RANDOM.nextFloat() < 0.5f) continue;
-
-                float angle = (float) (2.0 * Math.PI * i / particlesPerRing);
-                angle += effectTick * 0.02f; // slow rotation
-
-                float px = (float) (originX + Math.cos(angle) * ringRadius);
-                float pz = (float) (originZ + Math.sin(angle) * ringRadius);
-                float py = ringY + RANDOM.nextFloat() * 0.1f;
-
-                float[] color = PURPLE_PALETTE[RANDOM.nextInt(PURPLE_PALETTE.length)];
-
-                CustomParticle p = pm.spawn(px, (float) py, pz);
-                p.r = color[0]; p.g = color[1]; p.b = color[2];
-                p.a = alpha * 0.9f;
-                p.scale = 0.15f + RANDOM.nextFloat() * 0.2f;
-                p.lifetime = 40 + RANDOM.nextInt(30);
-                p.maxAge = p.lifetime;
-                p.gravity = 0f;
-                p.velY = 0.02f + RANDOM.nextFloat() * 0.03f;
-                p.additiveBlend = true;
-                p.fadeInTicks = 5;
-                p.fadeOutTicks = 15;
+            if (effect.isExpired()) {
+                it.remove();
+                continue;
             }
-        }
 
-        // Inner rune symbols (floating above the rings)
-        if (effectTick > 15 && effectTick % 4 == 0) {
-            float symbolRadius = 1.0f + progress * 2.5f;
-            float symbolY = originY + 0.3f + progress * 1.5f;
-            int symbolParticles = 6 + (int)(progress * 10);
+            double cx = effect.pos.getX() + 0.5;
+            double cy = effect.pos.getY() + 1.0;
+            double cz = effect.pos.getZ() + 0.5;
+            float progress = (float) effect.age / EFFECT_DURATION;
 
-            for (int i = 0; i < symbolParticles; i++) {
-                float angle = (float) (2.0 * Math.PI * i / symbolParticles + effectTick * 0.05f);
-                float px = (float) (originX + Math.cos(angle) * symbolRadius);
-                float pz = (float) (originZ + Math.sin(angle) * symbolRadius);
+            if (!effect.runesSpawned) {
+                effect.runesSpawned = true;
+                spawnRunicBurst(particleRenderer, cx, cy, cz);
+            }
 
-                float[] color = PURPLE_PALETTE[RANDOM.nextInt(PURPLE_PALETTE.length)];
-
-                CustomParticle p = pm.spawn(px, symbolY, pz);
-                p.r = color[0]; p.g = color[1]; p.b = color[2];
-                p.a = alpha * 0.8f;
-                p.scale = 0.2f + RANDOM.nextFloat() * 0.3f;
-                p.lifetime = 30 + RANDOM.nextInt(25);
-                p.maxAge = p.lifetime;
-                p.velY = 0.05f;
-                p.additiveBlend = true;
-                p.fadeOutTicks = 12;
+            int particlesPerTick = (int) (15 * (1.0f - progress * 0.7f));
+            for (int i = 0; i < particlesPerTick; i++) {
+                spawnPillarParticle(particleRenderer, cx, cy, cz);
             }
         }
     }
 
     /**
-     * Floating rune-like particles drifting upward.
+     * Render light pillars. Uses RenderTypes.beaconBeam-style additive blending.
      */
-    private void spawnFloatingRunes(ParticleManager pm, int effectTick) {
-        if (effectTick % 3 != 0) return;
+    public void render(Camera camera, float tickDelta) {
+        if (activeEffects.isEmpty()) return;
 
-        int count = 2 + RANDOM.nextInt(3);
-        for (int i = 0; i < count; i++) {
-            float angle = RANDOM.nextFloat() * (float)(2 * Math.PI);
-            float radius = 1.5f + RANDOM.nextFloat() * 4f;
-            float px = (float) (originX + Math.cos(angle) * radius);
-            float pz = (float) (originZ + Math.sin(angle) * radius);
-            float py = originY + 0.2f + RANDOM.nextFloat() * 2f;
-
-            float[] color = PURPLE_PALETTE[RANDOM.nextInt(PURPLE_PALETTE.length)];
-
-            CustomParticle p = pm.spawn(px, py, pz);
-            p.r = color[0]; p.g = color[1]; p.b = color[2];
-            p.a = 0.85f;
-            p.scale = 0.08f + RANDOM.nextFloat() * 0.15f;
-            p.lifetime = 50 + RANDOM.nextInt(40);
-            p.maxAge = p.lifetime;
-            p.velY = 0.03f + RANDOM.nextFloat() * 0.08f;
-            p.velX = (RANDOM.nextFloat() - 0.5f) * 0.03f;
-            p.velZ = (RANDOM.nextFloat() - 0.5f) * 0.03f;
-            p.gravity = -0.0005f; // slight upward float
-            p.additiveBlend = true;
-            p.fadeInTicks = 8;
-            p.fadeOutTicks = 20;
-            p.rotationSpeed = (RANDOM.nextFloat() - 0.5f) * 0.15f;
+        // Lazy-init the pillar render type with a solid white texture
+        if (cachedPillarRenderType == null) {
+            // Use entityTranslucent for the pillar with soft circle texture
+            cachedPillarRenderType = RenderTypes.entityTranslucent(
+                com.example.enderplus.client.particle.ParticleTexture.getTextureId());
         }
-    }
 
-    // ================================================================
-    // Phase 2: Light Beams
-    // ================================================================
+        VertexFormat format = cachedPillarRenderType.format();
+        BufferBuilder builder = Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, format);
 
-    /**
-     * Vertical light beams shooting up from the portal.
-     */
-    private void spawnLightBeams(ParticleManager pm, int effectTick) {
-        int localTick = effectTick - 20;
-        float beamProgress = Math.min(1f, localTick / 50f);
-        int numBeams = 5 + (int)(beamProgress * 8);
+        double camX = camera.position().x;
+        double camY = camera.position().y;
+        double camZ = camera.position().z;
 
-        for (int beam = 0; beam < numBeams; beam++) {
-            float beamAngle = (float) (2.0 * Math.PI * beam / numBeams + effectTick * 0.03f);
-            float beamRadius = 1.0f + beam * 0.4f;
-            float bx = (float) (originX + Math.cos(beamAngle) * beamRadius);
-            float bz = (float) (originZ + Math.sin(beamAngle) * beamRadius);
+        // Purple base color: #9B59B6 → (0.608, 0.349, 0.714)
+        float baseR = 0.608f;
+        float baseG = 0.349f;
+        float baseB = 0.714f;
 
-            // Beam column: particles rising from base to height
-            float beamHeight = 3f + beamProgress * 12f;
-            int particlesInBeam = 4 + (int)(beamHeight / 2);
+        for (ActiveEffect effect : activeEffects) {
+            float progress = (float) effect.age / EFFECT_DURATION;
+            if (progress < 0.05f) progress = 0.05f;
 
-            for (int j = 0; j < particlesInBeam; j++) {
-                float by = originY + (float) j / particlesInBeam * beamHeight;
-                float wobbleX = (RANDOM.nextFloat() - 0.5f) * 0.3f;
-                float wobbleZ = (RANDOM.nextFloat() - 0.5f) * 0.3f;
+            double cx = effect.pos.getX() + 0.5 - camX;
+            double cy = effect.pos.getY() - camY;
+            double cz = effect.pos.getZ() + 0.5 - camZ;
 
-                float[] color = PURPLE_PALETTE[RANDOM.nextInt(PURPLE_PALETTE.length)];
-
-                CustomParticle p = pm.spawn(bx + wobbleX, by, bz + wobbleZ);
-                p.r = color[0]; p.g = color[1]; p.b = color[2];
-                p.a = 0.7f * (1f - (float) j / particlesInBeam); // brighter at base
-                p.scale = 0.12f + RANDOM.nextFloat() * 0.18f;
-                p.lifetime = 15 + RANDOM.nextInt(20);
-                p.maxAge = p.lifetime;
-                p.velY = 0.15f + RANDOM.nextFloat() * 0.3f;
-                p.velX = wobbleX * 0.5f;
-                p.velZ = wobbleZ * 0.5f;
-                p.gravity = 0.01f;
-                p.additiveBlend = true;
-                p.fadeOutTicks = 10;
+            // Pulsing alpha
+            float pulse = 0.5f + 0.5f * (float) Math.sin(effect.age * 0.15);
+            float fadeAlpha = 1.0f;
+            if (progress < 0.15f) {
+                fadeAlpha = progress / 0.15f;
+            } else if (progress > 0.7f) {
+                fadeAlpha = (1.0f - progress) / 0.3f;
             }
+            float alpha = 0.35f * pulse * fadeAlpha;
+
+            renderPillarCylinder(builder, cx, cy, cz, PILLAR_WIDTH, PILLAR_HEIGHT,
+                PILLAR_SEGMENTS, alpha, baseR, baseG, baseB);
         }
 
-        // Central massive beam
-        if (effectTick % 2 == 0) {
-            float centralHeight = beamProgress * 10f;
-            for (int j = 0; j < 20; j++) {
-                float by = originY + centralHeight * j / 20f;
-                float wobble = (RANDOM.nextFloat() - 0.5f) * 0.5f;
-
-                CustomParticle p = pm.spawn(originX + wobble, by, originZ + wobble);
-                p.r = 0.9f; p.g = 0.4f; p.b = 1.0f;
-                p.a = 0.9f * (1f - (float) j / 20f);
-                p.scale = 0.25f;
-                p.lifetime = 12 + RANDOM.nextInt(15);
-                p.maxAge = p.lifetime;
-                p.velY = 0.4f + RANDOM.nextFloat() * 0.3f;
-                p.additiveBlend = true;
-                p.fadeOutTicks = 8;
-            }
-        }
+        MeshData mesh = builder.build();
+        cachedPillarRenderType.draw(mesh);
+        mesh.close();
     }
 
-    // ================================================================
-    // Phase 3: Runic Explosion
-    // ================================================================
+    private void renderPillarCylinder(BufferBuilder builder, double cx, double cy, double cz,
+                                       float radius, int height, int segments,
+                                       float alpha, float br, float bg, float bb) {
+        int ia = (int) (alpha * 255.0f);
+        if (ia < 0) ia = 0; if (ia > 255) ia = 255;
 
-    /**
-     * Particles burst outward in rune-like patterns from the center.
-     */
-    private void spawnRunicExplosion(ParticleManager pm, int effectTick) {
-        int localTick = effectTick - 40;
-        float intensity = (float) Math.sin(localTick / 90f * Math.PI); // peak then fade
+        for (int i = 0; i < segments; i++) {
+            double a1 = (2.0 * Math.PI * i) / segments;
+            double a2 = (2.0 * Math.PI * (i + 1)) / segments;
 
-        if (localTick % 3 != 0) return;
+            float c1 = (float) Math.cos(a1) * radius;
+            float s1 = (float) Math.sin(a1) * radius;
+            float c2 = (float) Math.cos(a2) * radius;
+            float s2 = (float) Math.sin(a2) * radius;
 
-        int branches = 8 + localTick / 10; // more branches over time
-        for (int branch = 0; branch < branches; branch++) {
-            float baseAngle = (float) (2.0 * Math.PI * branch / branches);
-            float branchLength = 3f + intensity * 8f;
+            // Bottom: bright purple
+            int irB = (int) (br * 1.3f * 255); int igB = (int) (bg * 1.3f * 255); int ibB = (int) (bb * 1.3f * 255);
+            if (irB > 255) irB = 255; if (igB > 255) igB = 255; if (ibB > 255) ibB = 255;
 
-            // Particles along the branch
-            int branchParticles = 5 + (int)(intensity * 10);
-            for (int j = 0; j < branchParticles; j++) {
-                float dist = (float) j / branchParticles * branchLength;
-                float angle = baseAngle + (RANDOM.nextFloat() - 0.5f) * 0.5f;
-                float px = (float) (originX + Math.cos(angle) * dist);
-                float pz = (float) (originZ + Math.sin(angle) * dist);
-                float py = originY + dist * 0.3f + RANDOM.nextFloat() * 2f;
+            // Top: dark/fading
+            int irT = (int) (br * 0.2f * 255); int igT = (int) (bg * 0.1f * 255); int ibT = (int) (bb * 0.3f * 255);
+            int iaT = (int) (ia * 0.05f);
 
-                float[] color = PURPLE_PALETTE[RANDOM.nextInt(PURPLE_PALETTE.length)];
-
-                CustomParticle p = pm.spawn(px, py, pz);
-                p.r = color[0]; p.g = color[1]; p.b = color[2];
-                p.a = intensity * 0.85f;
-                p.scale = 0.1f + (1f - (float) j / branchParticles) * 0.25f;
-                p.lifetime = 30 + RANDOM.nextInt(40);
-                p.maxAge = p.lifetime;
-
-                // Outward velocity
-                float speed = 0.1f + intensity * 0.4f;
-                p.velX = (float) Math.cos(angle) * speed * (1f - (float) j / branchParticles);
-                p.velZ = (float) Math.sin(angle) * speed * (1f - (float) j / branchParticles);
-                p.velY = 0.05f + RANDOM.nextFloat() * 0.2f;
-                p.gravity = 0.005f;
-                p.additiveBlend = true;
-                p.fadeInTicks = 5;
-                p.fadeOutTicks = 20;
-                p.rotationSpeed = (RANDOM.nextFloat() - 0.5f) * 0.2f;
-            }
+            builder.addVertex((float)(cx + c1), (float)cy, (float)(cz + s1))
+                .setColor(irB, igB, ibB, ia).setUv(0, 0);
+            builder.addVertex((float)(cx + c2), (float)cy, (float)(cz + s2))
+                .setColor(irB, igB, ibB, ia).setUv(1, 0);
+            builder.addVertex((float)(cx + c2), (float)(cy + height), (float)(cz + s2))
+                .setColor(irT, igT, ibT, iaT).setUv(1, 1);
+            builder.addVertex((float)(cx + c1), (float)(cy + height), (float)(cz + s1))
+                .setColor(irT, igT, ibT, iaT).setUv(0, 1);
         }
     }
 
-    /**
-     * Omni-directional burst of glowing particles.
-     */
-    private void spawnBurstParticles(ParticleManager pm, int effectTick) {
-        int localTick = effectTick - 40;
-        if (localTick % 2 != 0) return;
+    private void spawnRunicBurst(ParticleRenderer renderer, double x, double y, double z) {
+        for (int i = 0; i < RUNE_COUNT; i++) {
+            double angle = (2.0 * Math.PI * i) / RUNE_COUNT + (Math.random() - 0.5) * 0.5;
+            double speed = 0.15 + Math.random() * 0.35;
+            double vx = Math.cos(angle) * speed;
+            double vz = Math.sin(angle) * speed;
+            double vy = 0.05 + Math.random() * 0.25;
 
-        int count = 3 + RANDOM.nextInt(5);
-        for (int i = 0; i < count; i++) {
-            float yaw = RANDOM.nextFloat() * (float)(2 * Math.PI);
-            float pitch = (RANDOM.nextFloat() - 0.5f) * (float) Math.PI;
-            float speed = 0.15f + RANDOM.nextFloat() * 0.5f;
-            float height = originY + 1f + RANDOM.nextFloat() * 4f;
+            float hue = 0.72f + (float) Math.random() * 0.1f;
+            float[] rgb = rgbFromHue(hue);
 
-            float[] color = PURPLE_PALETTE[RANDOM.nextInt(PURPLE_PALETTE.length)];
+            double ox = x + (Math.random() - 0.5) * 0.5;
+            double oy = y + Math.random() * 2.0;
+            double oz = z + (Math.random() - 0.5) * 0.5;
 
-            CustomParticle p = pm.spawn(originX, height, originZ);
-            p.r = color[0]; p.g = color[1]; p.b = color[2];
-            p.a = 0.8f;
-            p.scale = 0.1f + RANDOM.nextFloat() * 0.2f;
-            p.lifetime = 35 + RANDOM.nextInt(30);
-            p.maxAge = p.lifetime;
-            p.velX = (float) (Math.cos(yaw) * Math.cos(pitch) * speed);
-            p.velY = (float) (Math.sin(pitch) * speed);
-            p.velZ = (float) (Math.sin(yaw) * Math.cos(pitch) * speed);
-            p.gravity = 0.003f;
-            p.additiveBlend = true;
-            p.fadeOutTicks = 15;
+            Particle rune = new Particle(ox, oy, oz, vx, vy, vz,
+                rgb[0], rgb[1], rgb[2], 0.9f,
+                0.4f + (float) Math.random() * 0.6f,
+                30 + (int) (Math.random() * 40));
+            rune.rotation = (float) (Math.random() * Math.PI * 2);
+            rune.rotationSpeed = (float) ((Math.random() - 0.5) * 0.3);
+            rune.hasGravity = false;
+            renderer.spawnParticle(rune);
         }
     }
 
-    // ================================================================
-    // Phase 4: Vortex Spiral
-    // ================================================================
+    private void spawnPillarParticle(ParticleRenderer renderer, double cx, double cy, double cz) {
+        double angle = Math.random() * 2.0 * Math.PI;
+        double radius = PILLAR_WIDTH * (0.3 + Math.random() * 0.7);
+        double px = cx + Math.cos(angle) * radius;
+        double pz = cz + Math.sin(angle) * radius;
+        double py = cy + Math.random() * 0.5;
 
-    /**
-     * Massive spiral vortex rising from the portal.
-     */
-    private void spawnVortex(ParticleManager pm, int effectTick) {
-        int localTick = effectTick - 80;
-        float vortexHeight = 2f + (localTick / 100f) * 18f; // grows from 2 to 20 blocks tall
-        float vortexRadius = 3f + (float) Math.sin(localTick / 100f * Math.PI) * 6f; // expands then contracts
+        double ts = 0.03 + Math.random() * 0.06;
+        double vx = -Math.sin(angle) * ts;
+        double vz = Math.cos(angle) * ts;
+        double vy = 0.15 + Math.random() * 0.35;
 
-        int numSpirals = 6;
-        for (int s = 0; s < numSpirals; s++) {
-            float baseAngle = (float) (2.0 * Math.PI * s / numSpirals);
-            int pointsPerSpiral = (int)(vortexHeight * 4);
+        float hue = 0.7f + (float) Math.random() * 0.12f;
+        float[] rgb = rgbFromHue(hue);
 
-            for (int i = 0; i < pointsPerSpiral; i++) {
-                float t = (float) i / pointsPerSpiral;
-                float y = t * vortexHeight;
-                float angle = baseAngle + t * (float)(2.5 * Math.PI) // spiral twist
-                              + effectTick * 0.08f; // rotation over time
-                float r = vortexRadius * (1f - t * 0.4f); // narrows at top
+        Particle p = new Particle(px, py, pz, vx, vy, vz,
+            rgb[0], rgb[1], rgb[2], 0.8f,
+            0.1f + (float) Math.random() * 0.3f,
+            20 + (int) (Math.random() * 60));
+        p.hasGravity = false;
+        renderer.spawnParticle(p);
+    }
 
-                float px = (float) (originX + Math.cos(angle) * r);
-                float pz = (float) (originZ + Math.sin(angle) * r);
+    private static float[] rgbFromHue(float hue) {
+        float sat = 0.6f + (float) Math.random() * 0.4f;
+        float bri = 0.7f + (float) Math.random() * 0.3f;
+        return hsvToRgb(hue, sat, bri);
+    }
 
-                float[] color = PURPLE_PALETTE[Math.min(PURPLE_PALETTE.length - 1,
-                    (int)(t * PURPLE_PALETTE.length))];
-
-                CustomParticle p = pm.spawn(px, originY + y, pz);
-                p.r = color[0]; p.g = color[1]; p.b = color[2];
-                p.a = 0.6f * (1f - t * 0.3f);
-                p.scale = 0.08f + (1f - t) * 0.2f;
-                p.lifetime = 20 + RANDOM.nextInt(25);
-                p.maxAge = p.lifetime;
-                p.velY = 0.1f;
-                p.velX = (RANDOM.nextFloat() - 0.5f) * 0.1f;
-                p.velZ = (RANDOM.nextFloat() - 0.5f) * 0.1f;
-                p.additiveBlend = true;
-                p.fadeInTicks = 3;
-                p.fadeOutTicks = 10;
-                p.rotationSpeed = 0.1f + RANDOM.nextFloat() * 0.2f;
-            }
+    private static float[] hsvToRgb(float h, float s, float v) {
+        float[] rgb = new float[3];
+        int i = (int) (h * 6.0f);
+        float f = h * 6.0f - i;
+        float p = v * (1.0f - s);
+        float q = v * (1.0f - f * s);
+        float t = v * (1.0f - (1.0f - f) * s);
+        switch (i % 6) {
+            case 0 -> { rgb[0] = v; rgb[1] = t; rgb[2] = p; }
+            case 1 -> { rgb[0] = q; rgb[1] = v; rgb[2] = p; }
+            case 2 -> { rgb[0] = p; rgb[1] = v; rgb[2] = t; }
+            case 3 -> { rgb[0] = p; rgb[1] = q; rgb[2] = v; }
+            case 4 -> { rgb[0] = t; rgb[1] = p; rgb[2] = v; }
+            case 5 -> { rgb[0] = v; rgb[1] = p; rgb[2] = q; }
         }
+        return rgb;
     }
 
-    /**
-     * Particles converging inward toward the center (energy building up).
-     */
-    private void spawnEnergyConvergence(ParticleManager pm, int effectTick) {
-        int localTick = effectTick - 80;
-        if (localTick % 5 != 0) return;
-
-        int count = 8 + RANDOM.nextInt(12);
-        for (int i = 0; i < count; i++) {
-            float angle = RANDOM.nextFloat() * (float)(2 * Math.PI);
-            float startRadius = 6f + RANDOM.nextFloat() * 8f;
-            float height = originY + 1f + RANDOM.nextFloat() * 10f;
-
-            float px = (float) (originX + Math.cos(angle) * startRadius);
-            float pz = (float) (originZ + Math.sin(angle) * startRadius);
-
-            float[] color = PURPLE_PALETTE[RANDOM.nextInt(PURPLE_PALETTE.length)];
-
-            CustomParticle p = pm.spawn(px, height, pz);
-            p.r = color[0]; p.g = color[1]; p.b = color[2];
-            p.a = 0.7f;
-            p.scale = 0.06f + RANDOM.nextFloat() * 0.12f;
-            p.lifetime = 40 + RANDOM.nextInt(30);
-            p.maxAge = p.lifetime;
-
-            // Velocity inward toward center
-            float inwardSpeed = 0.15f + RANDOM.nextFloat() * 0.25f;
-            p.velX = (float) -Math.cos(angle) * inwardSpeed;
-            p.velZ = (float) -Math.sin(angle) * inwardSpeed;
-            p.velY = -0.05f + RANDOM.nextFloat() * 0.1f; // slight vertical drift
-            p.additiveBlend = true;
-            p.fadeOutTicks = 18;
-            p.rotationSpeed = 0.05f;
-        }
-    }
-
-    // ================================================================
-    // Phase 5: Shockwave & Finale
-    // ================================================================
-
-    /**
-     * Expanding shockwave rings from the portal.
-     */
-    private void spawnShockwave(ParticleManager pm, int effectTick) {
-        int localTick = effectTick - 120;
-
-        // Spawn new shockwave rings periodically
-        if (localTick % 25 == 0 || localTick == 0) {
-            float ringRadius = 0.5f;
-            int particles = 60;
-
-            for (int i = 0; i < particles; i++) {
-                float angle = (float) (2.0 * Math.PI * i / particles);
-                float px = (float) (originX + Math.cos(angle) * ringRadius);
-                float pz = (float) (originZ + Math.sin(angle) * ringRadius);
-                float py = originY + 0.3f + (i % 3) * 0.5f;
-
-                float[] color = PURPLE_PALETTE[RANDOM.nextInt(PURPLE_PALETTE.length)];
-
-                CustomParticle p = pm.spawn(px, py, pz);
-                p.r = color[0]; p.g = color[1]; p.b = color[2];
-                p.a = 0.9f;
-                p.scale = 0.15f;
-                p.lifetime = 30;
-                p.maxAge = p.lifetime;
-
-                // Outward velocity
-                float speed = 0.3f + RANDOM.nextFloat() * 0.3f;
-                p.velX = (float) Math.cos(angle) * speed;
-                p.velZ = (float) Math.sin(angle) * speed;
-                p.velY = 0.02f;
-                p.additiveBlend = true;
-                p.fadeOutTicks = 20;
-                p.fadeInTicks = 2;
-            }
-        }
-    }
-
-    /**
-     * Bright final flash as the dragon emerges.
-     */
-    private void spawnFinalFlash(ParticleManager pm, int effectTick) {
-        int localTick = effectTick - 120;
-        float progress = Math.min(1f, localTick / 80f);
-        float intensity = (float) (1.0 - Math.pow(1.0 - progress, 4)); // rapid rise then plateau
-
-        if (localTick % 2 != 0) return;
-
-        int count = 5 + (int)(intensity * 30);
-        for (int i = 0; i < count; i++) {
-            float angle = RANDOM.nextFloat() * (float)(2 * Math.PI);
-            float radius = RANDOM.nextFloat() * intensity * 8f;
-            float px = (float) (originX + Math.cos(angle) * radius);
-            float pz = (float) (originZ + Math.sin(angle) * radius);
-            float py = originY + RANDOM.nextFloat() * 6f * intensity;
-
-            // Shift toward white/violet as intensity increases
-            float[] color = PURPLE_PALETTE[RANDOM.nextInt(PURPLE_PALETTE.length)];
-            float whiteMix = intensity * 0.5f;
-
-            CustomParticle p = pm.spawn(px, py, pz);
-            p.r = color[0] + (1f - color[0]) * whiteMix;
-            p.g = color[1] + (1f - color[1]) * whiteMix;
-            p.b = color[2] + (1f - color[2]) * whiteMix;
-            p.a = 0.6f + intensity * 0.4f;
-            p.scale = 0.1f + intensity * 0.5f;
-            p.lifetime = 20 + RANDOM.nextInt(25);
-            p.maxAge = p.lifetime;
-
-            // Upward + outward
-            p.velY = 0.15f + RANDOM.nextFloat() * 0.4f * intensity;
-            p.velX = (RANDOM.nextFloat() - 0.5f) * 0.2f;
-            p.velZ = (RANDOM.nextFloat() - 0.5f) * 0.2f;
-            p.additiveBlend = true;
-            p.fadeOutTicks = 12;
-            p.fadeInTicks = 3 * (1f - intensity);
-        }
-    }
-
-    // ================================================================
-    // Ambient
-    // ================================================================
-
-    /**
-     * Tiny sparkles around the area throughout the effect.
-     */
-    private void spawnAmbientSparkles(ParticleManager pm) {
-        if (RANDOM.nextFloat() > 0.4f) return;
-
-        float angle = RANDOM.nextFloat() * (float)(2 * Math.PI);
-        float radius = 1f + RANDOM.nextFloat() * 6f;
-        float px = (float) (originX + Math.cos(angle) * radius);
-        float pz = (float) (originZ + Math.sin(angle) * radius);
-        float py = originY + RANDOM.nextFloat() * 5f;
-
-        float[] color = PURPLE_PALETTE[RANDOM.nextInt(PURPLE_PALETTE.length)];
-
-        CustomParticle p = pm.spawn(px, py, pz);
-        p.r = color[0]; p.g = color[1]; p.b = color[2];
-        p.a = 0.5f;
-        p.scale = 0.03f + RANDOM.nextFloat() * 0.07f;
-        p.lifetime = 30 + RANDOM.nextInt(30);
-        p.maxAge = p.lifetime;
-        p.velY = 0.02f + RANDOM.nextFloat() * 0.04f;
-        p.additiveBlend = true;
-        p.fadeInTicks = 10;
-        p.fadeOutTicks = 15;
-    }
-
-    // ================================================================
-    // Helpers
-    // ================================================================
-
-    /**
-     * Smooth ease-in-out for transitions.
-     */
-    private static float easeInOut(float t) {
-        return t < 0.5f ? 2f * t * t : -1f + (4f - 2f * t) * t;
+    public boolean hasActiveEffects() {
+        return !activeEffects.isEmpty();
     }
 }
